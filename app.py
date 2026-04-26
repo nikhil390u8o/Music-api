@@ -22,7 +22,7 @@ threading.Thread(target=keep_alive, daemon=True).start()
 
 def get_stream(query: str):
     ydl_opts = {
-        "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best",
+        "format": "best",  # ← simple format
         "quiet": True,
         "noplaylist": True,
         "geo_bypass": True,
@@ -30,7 +30,6 @@ def get_stream(query: str):
         "extractor_args": {
             "youtube": {
                 "player_client": ["android_vr"],
-                # player_skip HATAO
             }
         },
     }
@@ -39,24 +38,17 @@ def get_stream(query: str):
         info = ydl.extract_info(f"ytsearch:{query}", download=False)
         track = info["entries"][0]
 
-        formats = track.get("requested_formats") or [track]
-
-        if len(formats) >= 2:
-            video_url = formats[0]["url"]
-            audio_url = formats[1]["url"]
-        else:
-            video_url = formats[0]["url"]
-            audio_url = formats[0]["url"]
+        # Single URL — audio aur video same rahega
+        url = track["url"]
 
         return {
             "id": track["id"],
             "title": track["title"],
             "duration": track.get("duration", 0),
             "thumbnail": track.get("thumbnail", ""),
-            "audio_url": audio_url,
-            "video_url": video_url,
+            "audio_url": url,
+            "video_url": url,
         }
-
 @app.route("/")
 def index():
     return {"status": "Music API running 🎵"}
