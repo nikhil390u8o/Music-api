@@ -26,11 +26,11 @@ def get_stream(query: str):
         "quiet": True,
         "noplaylist": True,
         "geo_bypass": True,
-        "cookiefile": "cookies.txt",  # ← cookies add
+        "cookiefile": "cookies.txt",
         "extractor_args": {
             "youtube": {
                 "player_client": ["android_vr"],
-                "player_skip": ["webpage", "configs"],
+                # player_skip HATAO
             }
         },
     }
