@@ -21,17 +21,17 @@ threading.Thread(target=keep_alive, daemon=True).start()
 
 def get_stream(query: str):
     ydl_opts = {
-        "format": "bestaudio/best",
-        "quiet": True,
-        "noplaylist": True,
-        "geo_bypass": True,
-        "cookiefile": "cookies.txt",
-        "extractor_args": {
-            "youtube": {
-                "player_client": ["ios"],
-            }
-        },
-    }
+    "format": "bestaudio/best",
+    "quiet": True,
+    "noplaylist": True,
+    "geo_bypass": True,
+    "cookiefile": "cookies.txt",
+    "extractor_args": {
+        "youtube": {
+            "player_client": ["ios", "web"],  # dono try karega
+        }
+    },
+}
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(f"ytsearch:{query}", download=False)
