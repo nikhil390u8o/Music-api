@@ -20,19 +20,20 @@ def keep_alive():
 
 threading.Thread(target=keep_alive, daemon=True).start()
 
-# ─── yt-dlp se stream URLs nikalo ────────────────────────────────────────────
 def get_stream(query: str):
     ydl_opts = {
-    "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best",
-    "quiet": True,
-    "noplaylist": True,
-    "extractor_args": {
-        "youtube": {
-            "player_client": ["android_vr"],
-            "player_skip": ["webpage", "configs"],
-        }
-    },
-}
+        "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best",
+        "quiet": True,
+        "noplaylist": True,
+        "geo_bypass": True,
+        "cookiefile": "cookies.txt",  # ← cookies add
+        "extractor_args": {
+            "youtube": {
+                "player_client": ["android_vr"],
+                "player_skip": ["webpage", "configs"],
+            }
+        },
+    }
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(f"ytsearch:{query}", download=False)
@@ -56,8 +57,6 @@ def get_stream(query: str):
             "video_url": video_url,
         }
 
-# ─── Routes ──────────────────────────────────────────────────────────────────
-
 @app.route("/")
 def index():
     return {"status": "Music API running 🎵"}
@@ -75,8 +74,8 @@ def stream():
             "title": data["title"],
             "duration": data["duration"],
             "thumbnail": data["thumbnail"],
-            "audio_url": data["audio_url"],   # ← AudioPiped() me daalo
-            "video_url": data["video_url"],   # ← VideoPiped() me daalo
+            "audio_url": data["audio_url"],
+            "video_url": data["video_url"],
         }
     except Exception as e:
         return {"error": str(e)}, 500
