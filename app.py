@@ -27,6 +27,11 @@ def get_stream(query: str):
         "quiet": True,
         "noplaylist": True,
         "geo_bypass": True,
+        "extractor_args": {
+            "youtube": {
+                "player_client": ["android_vr"],
+            }
+        },
     }
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
