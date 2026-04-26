@@ -22,33 +22,31 @@ threading.Thread(target=keep_alive, daemon=True).start()
 
 def get_stream(query: str):
     ydl_opts = {
-        "format": "best",  # ← simple format
-        "quiet": True,
-        "noplaylist": True,
-        "geo_bypass": True,
-        "cookiefile": "cookies.txt",
-        "extractor_args": {
-            "youtube": {
-                "player_client": ["android_vr"],
-            }
-        },
-    }
-
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(f"ytsearch:{query}", download=False)
-        track = info["entries"][0]
-
-        # Single URL — audio aur video same rahega
-        url = track["url"]
-
-        return {
-            "id": track["id"],
-            "title": track["title"],
-            "duration": track.get("duration", 0),
-            "thumbnail": track.get("thumbnail", ""),
-            "audio_url": url,
-            "video_url": url,
+    "format": "bestaudio/best",
+    "quiet": True,
+    "noplaylist": True,
+    "geo_bypass": True,
+    "cookiefile": "cookies.txt",
+    "extractor_args": {
+        "youtube": {
+            "player_client": ["ios"],  # android_vr → ios
         }
+    },
+}
+
+with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+    info = ydl.extract_info(f"ytsearch:{query}", download=False)
+    track = info["entries"][0]
+    url = track["url"]
+
+    return {
+        "id": track["id"],
+        "title": track["title"],
+        "duration": track.get("duration", 0),
+        "thumbnail": track.get("thumbnail", ""),
+        "audio_url": url,
+        "video_url": url,
+    }
 @app.route("/")
 def index():
     return {"status": "Music API running 🎵"}
