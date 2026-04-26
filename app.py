@@ -19,28 +19,46 @@ def keep_alive():
 
 threading.Thread(target=keep_alive, daemon=True).start()
 
+import tempfile
+
 def get_stream(query: str):
+    # Env se cookies load karo
+    cookies_content = os.environ.get("YT_COOKIES", "")
+    cookies_file = None
+    
+    if cookies_content:
+        tmp = tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False)
+        tmp.write(cookies_content)
+        tmp.flush()
+        tmp.close()
+        cookies_file = tmp.name
+
     ydl_opts = {
-    "format": "bestaudio/best",
-    "quiet": True,
-    "noplaylist": True,
-    "geo_bypass": True,
-    "cookiefile": "cookies.txt",
-}
+        "format": "bestaudio/best",
+        "quiet": True,
+        "noplaylist": True,
+        "geo_bypass": True,
+    }
+    
+    if cookies_file:
+        ydl_opts["cookiefile"] = cookies_file
 
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(f"ytsearch:{query}", download=False)
-        track = info["entries"][0]
-        url = track["url"]
-
-        return {
-            "id": track["id"],
-            "title": track["title"],
-            "duration": track.get("duration", 0),
-            "thumbnail": track.get("thumbnail", ""),
-            "audio_url": url,
-            "video_url": url,
-        }
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(f"ytsearch:{query}", download=False)
+            track = info["entries"][0]
+            url = track["url"]
+            return {
+                "id": track["id"],
+                "title": track["title"],
+                "duration": track.get("duration", 0),
+                "thumbnail": track.get("thumbnail", ""),
+                "audio_url": url,
+                "video_url": url,
+            }
+    finally:
+        if cookies_file:
+            os.unlink(cookies_file)
 
 @app.route("/")
 def index():
