@@ -26,11 +26,6 @@ def get_stream(query: str):
     "noplaylist": True,
     "geo_bypass": True,
     "cookiefile": "cookies.txt",
-    "extractor_args": {
-        "youtube": {
-            "player_client": ["ios", "web"],  # dono try karega
-        }
-    },
 }
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
