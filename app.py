@@ -6,7 +6,7 @@ import base64
 
 app = Flask(__name__)
 
-# ---------- Load cookies from BASE64 ----------
+# ---------- Load cookies from BASE64 ENV ----------
 COOKIES_FILE = None
 b64 = os.environ.get("YT_COOKIES_B64")
 
@@ -19,7 +19,7 @@ if b64:
     COOKIES_FILE = tmp.name
 
 
-# ---------- Search video ----------
+# ---------- Search YouTube video page ----------
 def search_video(query: str) -> str:
     ydl_opts = {
         "quiet": True,
@@ -32,7 +32,7 @@ def search_video(query: str) -> str:
         return info["entries"][0]["webpage_url"]
 
 
-# ---------- Extract audio + video ----------
+# ---------- Extract Audio & Video streams ----------
 def extract_streams(page_url: str):
     common_opts = {
         "quiet": True,
@@ -44,7 +44,7 @@ def extract_streams(page_url: str):
     if COOKIES_FILE:
         common_opts["cookiefile"] = COOKIES_FILE
 
-    # ---- VIDEO (audio+video mp4) ----
+    # ---- VIDEO (mp4 with audio) ----
     video_opts = common_opts.copy()
     video_opts["format"] = "best[ext=mp4]/best"
 
