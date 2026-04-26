@@ -23,16 +23,16 @@ threading.Thread(target=keep_alive, daemon=True).start()
 # ─── yt-dlp se stream URLs nikalo ────────────────────────────────────────────
 def get_stream(query: str):
     ydl_opts = {
-        "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best",
-        "quiet": True,
-        "noplaylist": True,
-        "geo_bypass": True,
-        "extractor_args": {
-            "youtube": {
-                "player_client": ["android_vr"],
-            }
-        },
-    }
+    "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best",
+    "quiet": True,
+    "noplaylist": True,
+    "extractor_args": {
+        "youtube": {
+            "player_client": ["android_vr"],
+            "player_skip": ["webpage", "configs"],
+        }
+    },
+}
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(f"ytsearch:{query}", download=False)
