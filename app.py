@@ -28,13 +28,15 @@ def get_stream(query: str):
     "quiet": True,
     "noplaylist": True,
     "nocheckcertificate": True,
-    "cookiefile": cookies_path if os.path.exists(cookies_path) else None,
     "extractor_args": {
         "youtube": {
-            "player_client": ["android"],
+            "player_client": ["web"],
         }
     },
 }
+
+if os.path.exists(cookies_path):
+    ydl_opts["cookiefile"] = cookies_path
 
     if os.path.exists(cookies_path):
         ydl_opts["cookiefile"] = cookies_path
