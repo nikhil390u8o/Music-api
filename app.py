@@ -3,6 +3,7 @@ import requests
 import os
 import threading
 import time
+from urllib.parse import quote
 
 app = Flask(__name__)
 
@@ -18,41 +19,65 @@ def keep_alive():
 
 threading.Thread(target=keep_alive, daemon=True).start()
 
-def get_stream(query: str):
-    # Step 1: Search
-    search_r = requests.get(
-        f"https://pipedapi.kavin.rocks/search?q={query}&filter=music_songs",
-        timeout=15
-    )
-    items = search_r.json().get("items", [])
-    if not items:
-        raise Exception("No results found")
-    
-    item = items[0]
-    yt_id = item["url"].split("?v=")[-1]
-    title = item["title"]
-    duration = item.get("duration", 0)
-    thumbnail = item.get("thumbnail", f"https://i.ytimg.com/vi/{yt_id}/maxresdefault.jpg")
+INVIDIOUS = [
+    "https://invidious.nerdvpn.de",
+    "https://inv.nadeko.net",
+    "https://invidious.privacydev.net",
+]
 
-    # Step 2: Stream URL from Piped
-    stream_r = requests.get(
-        f"https://pipedapi.kavin.rocks/streams/{yt_id}",
-        timeout=15
-    )
-    data = stream_r.json()
-    
+def get_stream(query: str):
+    # Search
+    yt_id = None
+    title = None
+    duration = 0
+    thumbnail = None
+
+    for instance in INVIDIOUS:
+        try:
+            r = requests.get(
+                f"{instance}/api/v1/search?q={quote(query)}&type=video",
+                timeout=10
+            )
+            results = r.json()
+            if results and isinstance(results, list):
+                v = results[0]
+                yt_id = v["videoId"]
+                title = v["title"]
+                duration = v.get("lengthSeconds", 0)
+                thumbnail = f"https://i.ytimg.com/vi/{yt_id}/maxresdefault.jpg"
+                break
+        except:
+            continue
+
+    if not yt_id:
+        raise Exception("Search failed")
+
+    # Stream URLs
     audio_url = None
     video_url = None
 
-    for s in data.get("audioStreams", []):
-        if s.get("url"):
-            audio_url = s["url"]
-            break
+    for instance in INVIDIOUS:
+        try:
+            r = requests.get(
+                f"{instance}/api/v1/videos/{yt_id}",
+                timeout=10
+            )
+            data = r.json()
+            formats = data.get("adaptiveFormats", [])
 
-    for s in data.get("videoStreams", []):
-        if s.get("url"):
-            video_url = s["url"]
-            break
+            for f in formats:
+                if "audio" in f.get("type", "") and not audio_url:
+                    audio_url = f["url"]
+                if "video" in f.get("type", "") and not video_url:
+                    video_url = f["url"]
+
+            if audio_url:
+                break
+        except:
+            continue
+
+    if not audio_url:
+        raise Exception("Stream URL not found")
 
     return {
         "id": yt_id,
