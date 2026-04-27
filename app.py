@@ -4,7 +4,6 @@ import os
 import requests
 import threading
 import time
-import tempfile
 
 app = Flask(__name__)
 
@@ -21,40 +20,47 @@ def keep_alive():
 threading.Thread(target=keep_alive, daemon=True).start()
 
 def get_stream(query: str):
-    # cookies.txt file path
     base_dir = os.path.dirname(os.path.abspath(__file__))
     cookies_path = os.path.join(base_dir, "cookies.txt")
 
     ydl_opts = {
-    "format": "worstaudio/worst",  # jo bhi mile le lo
-    "quiet": True,
-    "noplaylist": True,
-    "geo_bypass": True,
-    "nocheckcertificate": True,
-    "extractor_args": {
-        "youtube": {
-            "player_client": ["tv_embedded"],
+        "format": "bestaudio/best",
+        "quiet": True,
+        "noplaylist": True,
+        "geo_bypass": True,
+        "nocheckcertificate": True,
+        "extractor_args": {
+            "youtube": {
+                "player_client": ["tv_embedded"],
+            }
+        },
+    }
+
+    if os.path.exists(cookies_path):
+        ydl_opts["cookiefile"] = cookies_path
+
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        info = ydl.extract_info(f"ytsearch:{query}", download=False)
+        track = info["entries"][0]
+
+        formats = track.get("formats", [])
+        audio_url = None
+        for f in reversed(formats):
+            if f.get("url"):
+                audio_url = f["url"]
+                break
+
+        if not audio_url:
+            audio_url = track.get("url", "")
+
+        return {
+            "id": track["id"],
+            "title": track["title"],
+            "duration": track.get("duration", 0),
+            "thumbnail": track.get("thumbnail", ""),
+            "audio_url": audio_url,
+            "video_url": audio_url,
         }
-    },
-}
-
-if os.path.exists(cookies_path):
-    ydl_opts["cookiefile"] = cookies_path
-
-with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-    info = ydl.extract_info(f"ytsearch:{query}", download=False)
-    track = info["entries"][0]
-    
-    # Best available format lo
-    formats = track.get("formats", [])
-    audio_url = None
-    for f in reversed(formats):
-        if f.get("url"):
-            audio_url = f["url"]
-            break
-    
-    if not audio_url:
-        audio_url = track.get("url", "")
 
 @app.route("/")
 def index():
