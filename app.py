@@ -1,7 +1,6 @@
 from flask import Flask, request, jsonify
-from pytubefix import YouTube, Search
-import os
 import requests
+import os
 import threading
 import time
 
@@ -20,19 +19,48 @@ def keep_alive():
 threading.Thread(target=keep_alive, daemon=True).start()
 
 def get_stream(query: str):
-    results = Search(query)
-    yt = results.videos[0]
+    # Step 1: Search
+    search_r = requests.get(
+        f"https://pipedapi.kavin.rocks/search?q={query}&filter=music_songs",
+        timeout=15
+    )
+    items = search_r.json().get("items", [])
+    if not items:
+        raise Exception("No results found")
+    
+    item = items[0]
+    yt_id = item["url"].split("?v=")[-1]
+    title = item["title"]
+    duration = item.get("duration", 0)
+    thumbnail = item.get("thumbnail", f"https://i.ytimg.com/vi/{yt_id}/maxresdefault.jpg")
 
-    audio_url = yt.streams.get_audio_only().url
-    video_url = yt.streams.get_highest_resolution().url
+    # Step 2: Stream URL from Piped
+    stream_r = requests.get(
+        f"https://pipedapi.kavin.rocks/streams/{yt_id}",
+        timeout=15
+    )
+    data = stream_r.json()
+    
+    audio_url = None
+    video_url = None
+
+    for s in data.get("audioStreams", []):
+        if s.get("url"):
+            audio_url = s["url"]
+            break
+
+    for s in data.get("videoStreams", []):
+        if s.get("url"):
+            video_url = s["url"]
+            break
 
     return {
-        "id": yt.video_id,
-        "title": yt.title,
-        "duration": yt.length,
-        "thumbnail": yt.thumbnail_url,
+        "id": yt_id,
+        "title": title,
+        "duration": duration,
+        "thumbnail": thumbnail,
         "audio_url": audio_url,
-        "video_url": video_url,
+        "video_url": video_url or audio_url,
     }
 
 @app.route("/")
@@ -46,14 +74,7 @@ def stream():
         return {"error": "query required"}, 400
     try:
         data = get_stream(query)
-        return {
-            "id": data["id"],
-            "title": data["title"],
-            "duration": data["duration"],
-            "thumbnail": data["thumbnail"],
-            "audio_url": data["audio_url"],
-            "video_url": data["video_url"],
-        }
+        return data
     except Exception as e:
         return {"error": str(e)}, 500
 
