@@ -26,34 +26,35 @@ def get_stream(query: str):
     cookies_path = os.path.join(base_dir, "cookies.txt")
 
     ydl_opts = {
-        "format": "bestaudio/best",
-        "quiet": True,
-        "noplaylist": True,
-        "geo_bypass": True,
-        "nocheckcertificate": True,
-        "extractor_args": {
-            "youtube": {
-                "player_client": ["tv_embedded"],
-            }
-        },
-    }
-
-    if os.path.exists(cookies_path):
-        ydl_opts["cookiefile"] = cookies_path
-
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(f"ytsearch:{query}", download=False)
-        track = info["entries"][0]
-        url = track["url"]
-
-        return {
-            "id": track["id"],
-            "title": track["title"],
-            "duration": track.get("duration", 0),
-            "thumbnail": track.get("thumbnail", ""),
-            "audio_url": url,
-            "video_url": url,
+    "format": "worstaudio/worst",  # jo bhi mile le lo
+    "quiet": True,
+    "noplaylist": True,
+    "geo_bypass": True,
+    "nocheckcertificate": True,
+    "extractor_args": {
+        "youtube": {
+            "player_client": ["tv_embedded"],
         }
+    },
+}
+
+if os.path.exists(cookies_path):
+    ydl_opts["cookiefile"] = cookies_path
+
+with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+    info = ydl.extract_info(f"ytsearch:{query}", download=False)
+    track = info["entries"][0]
+    
+    # Best available format lo
+    formats = track.get("formats", [])
+    audio_url = None
+    for f in reversed(formats):
+        if f.get("url"):
+            audio_url = f["url"]
+            break
+    
+    if not audio_url:
+        audio_url = track.get("url", "")
 
 @app.route("/")
 def index():
