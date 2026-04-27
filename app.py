@@ -24,13 +24,13 @@ def get_stream(query: str):
     cookies_path = os.path.join(base_dir, "cookies.txt")
 
     ydl_opts = {
-    "format": "140/bestaudio/best",
+    "format": "18",  # ← mp4 360p, audio+video dono
     "quiet": True,
     "noplaylist": True,
     "nocheckcertificate": True,
     "extractor_args": {
         "youtube": {
-            "player_client": ["mweb"],
+            "player_client": ["android"],
         }
     },
 }
