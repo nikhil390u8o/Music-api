@@ -1,5 +1,5 @@
 from flask import Flask, request, jsonify
-import yt_dlp
+from pytubefix import YouTube, Search
 import os
 import requests
 import threading
@@ -20,55 +20,20 @@ def keep_alive():
 threading.Thread(target=keep_alive, daemon=True).start()
 
 def get_stream(query: str):
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    cookies_path = os.path.join(base_dir, "cookies.txt")
+    results = Search(query)
+    yt = results.videos[0]
 
-    ydl_opts = {
-        "format": "18/bestaudio/best",
-        "quiet": True,
-        "noplaylist": True,
-        "nocheckcertificate": True,
-        "extractor_args": {
-            "youtube": {
-                "player_client": ["web"],
-            }
-        },
+    audio_url = yt.streams.get_audio_only().url
+    video_url = yt.streams.get_highest_resolution().url
+
+    return {
+        "id": yt.video_id,
+        "title": yt.title,
+        "duration": yt.length,
+        "thumbnail": yt.thumbnail_url,
+        "audio_url": audio_url,
+        "video_url": video_url,
     }
-
-    if os.path.exists(cookies_path):
-        ydl_opts["cookiefile"] = cookies_path
-
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(f"ytsearch:{query}", download=False)
-        track = info["entries"][0]
-        formats = track.get("formats", [])
-
-        audio_url = None
-        video_url = None
-
-        for f in reversed(formats):
-            if f.get("acodec") != "none" and f.get("url"):
-                audio_url = f["url"]
-                break
-
-        for f in reversed(formats):
-            if f.get("vcodec") != "none" and f.get("url"):
-                video_url = f["url"]
-                break
-
-        if not audio_url:
-            audio_url = formats[-1]["url"] if formats else track.get("url", "")
-        if not video_url:
-            video_url = audio_url
-
-        return {
-            "id": track["id"],
-            "title": track["title"],
-            "duration": track.get("duration", 0),
-            "thumbnail": track.get("thumbnail", ""),
-            "audio_url": audio_url,
-            "video_url": video_url,
-        }
 
 @app.route("/")
 def index():
