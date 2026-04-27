@@ -24,7 +24,6 @@ def get_stream(query: str):
     cookies_path = os.path.join(base_dir, "cookies.txt")
 
     ydl_opts = {
-        "format": "bestaudio/best",
         "quiet": True,
         "noplaylist": True,
         "geo_bypass": True,
@@ -44,14 +43,24 @@ def get_stream(query: str):
         track = info["entries"][0]
 
         formats = track.get("formats", [])
+
         audio_url = None
+        video_url = None
+
         for f in reversed(formats):
-            if f.get("url"):
+            if f.get("acodec") != "none" and f.get("url"):
                 audio_url = f["url"]
                 break
 
+        for f in reversed(formats):
+            if f.get("vcodec") != "none" and f.get("url"):
+                video_url = f["url"]
+                break
+
         if not audio_url:
-            audio_url = track.get("url", "")
+            audio_url = formats[-1]["url"] if formats else track.get("url", "")
+        if not video_url:
+            video_url = audio_url
 
         return {
             "id": track["id"],
@@ -59,7 +68,7 @@ def get_stream(query: str):
             "duration": track.get("duration", 0),
             "thumbnail": track.get("thumbnail", ""),
             "audio_url": audio_url,
-            "video_url": audio_url,
+            "video_url": video_url,
         }
 
 @app.route("/")
