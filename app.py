@@ -24,16 +24,16 @@ def get_stream(query: str):
     cookies_path = os.path.join(base_dir, "cookies.txt")
 
     ydl_opts = {
-        "quiet": True,
-        "noplaylist": True,
-        "geo_bypass": True,
-        "nocheckcertificate": True,
-        "extractor_args": {
-            "youtube": {
-                "player_client": ["tv_embedded"],
-            }
-        },
-    }
+    "format": "140/bestaudio/best",
+    "quiet": True,
+    "noplaylist": True,
+    "nocheckcertificate": True,
+    "extractor_args": {
+        "youtube": {
+            "player_client": ["mweb"],
+        }
+    },
+}
 
     if os.path.exists(cookies_path):
         ydl_opts["cookiefile"] = cookies_path
