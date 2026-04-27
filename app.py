@@ -24,19 +24,16 @@ def get_stream(query: str):
     cookies_path = os.path.join(base_dir, "cookies.txt")
 
     ydl_opts = {
-    "format": "18/bestaudio/best",
-    "quiet": True,
-    "noplaylist": True,
-    "nocheckcertificate": True,
-    "extractor_args": {
-        "youtube": {
-            "player_client": ["web"],
-        }
-    },
-}
-
-if os.path.exists(cookies_path):
-    ydl_opts["cookiefile"] = cookies_path
+        "format": "18/bestaudio/best",
+        "quiet": True,
+        "noplaylist": True,
+        "nocheckcertificate": True,
+        "extractor_args": {
+            "youtube": {
+                "player_client": ["web"],
+            }
+        },
+    }
 
     if os.path.exists(cookies_path):
         ydl_opts["cookiefile"] = cookies_path
@@ -44,7 +41,6 @@ if os.path.exists(cookies_path):
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(f"ytsearch:{query}", download=False)
         track = info["entries"][0]
-
         formats = track.get("formats", [])
 
         audio_url = None
