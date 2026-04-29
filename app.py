@@ -1,108 +1,117 @@
-from flask import Flask, request, jsonify
-import requests
 import os
-import threading
-import time
-from urllib.parse import quote
+import re
+import yt_dlp
+import requests
+from fastapi import FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 
-app = Flask(__name__)
+app = FastAPI()
 
-def keep_alive():
-    url = os.environ.get("RENDER_URL", "")
-    while True:
-        time.sleep(840)
-        try:
-            if url:
-                requests.get(url, timeout=10)
-        except:
-            pass
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-threading.Thread(target=keep_alive, daemon=True).start()
+YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY")
+YOUTUBE_SEARCH_URL = "https://www.googleapis.com/youtube/v3/search"
+YOUTUBE_VIDEO_URL  = "https://www.googleapis.com/youtube/v3/videos"
 
-INVIDIOUS = [
-    "https://invidious.nerdvpn.de",
-    "https://inv.nadeko.net",
-    "https://invidious.privacydev.net",
-]
 
-def get_stream(query: str):
-    # Search
-    yt_id = None
-    title = None
-    duration = 0
-    thumbnail = None
+class SearchResponse(BaseModel):
+    id: str
+    title: str
+    duration: str
+    thumbnail: str
+    video_url: str
+    audio_url: str
 
-    for instance in INVIDIOUS:
-        try:
-            r = requests.get(
-                f"{instance}/api/v1/search?q={quote(query)}&type=video",
-                timeout=10
-            )
-            results = r.json()
-            if results and isinstance(results, list):
-                v = results[0]
-                yt_id = v["videoId"]
-                title = v["title"]
-                duration = v.get("lengthSeconds", 0)
-                thumbnail = f"https://i.ytimg.com/vi/{yt_id}/maxresdefault.jpg"
-                break
-        except:
-            continue
 
-    if not yt_id:
-        raise Exception("Search failed")
+def parse_duration(iso: str) -> str:
+    """PT3M45S  →  3:45"""
+    match = re.match(r"PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?", iso)
+    if not match:
+        return "0:00"
+    h, m, s = (int(x or 0) for x in match.groups())
+    if h:
+        return f"{h}:{m:02}:{s:02}"
+    return f"{m}:{s:02}"
 
-    # Stream URLs
-    audio_url = None
-    video_url = None
 
-    for instance in INVIDIOUS:
-        try:
-            r = requests.get(
-                f"{instance}/api/v1/videos/{yt_id}",
-                timeout=10
-            )
-            data = r.json()
-            formats = data.get("adaptiveFormats", [])
-
-            for f in formats:
-                if "audio" in f.get("type", "") and not audio_url:
-                    audio_url = f["url"]
-                if "video" in f.get("type", "") and not video_url:
-                    video_url = f["url"]
-
-            if audio_url:
-                break
-        except:
-            continue
-
-    if not audio_url:
-        raise Exception("Stream URL not found")
-
-    return {
-        "id": yt_id,
-        "title": title,
-        "duration": duration,
-        "thumbnail": thumbnail,
-        "audio_url": audio_url,
-        "video_url": video_url or audio_url,
+def get_audio_url(video_id: str) -> str:
+    ydl_opts = {
+        "format": "bestaudio/best",
+        "quiet": True,
+        "no_warnings": True,
+        "noplaylist": True,
     }
+    url = f"https://www.youtube.com/watch?v={video_id}"
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        info = ydl.extract_info(url, download=False)
+        return info["url"]
 
-@app.route("/")
-def index():
-    return {"status": "Music API running 🎵"}
 
-@app.route("/stream")
-def stream():
-    query = request.args.get("query", "").strip()
-    if not query:
-        return {"error": "query required"}, 400
+@app.get("/search", response_model=SearchResponse)
+def search(q: str = Query(..., description="Song name to search")):
+    if not YOUTUBE_API_KEY:
+        raise HTTPException(status_code=500, detail="YOUTUBE_API_KEY not set.")
+
+    # ── Step 1: Search ──────────────────────────────────────────────
     try:
-        data = get_stream(query)
-        return data
+        res = requests.get(YOUTUBE_SEARCH_URL, params={
+            "part": "snippet",
+            "q": q,
+            "type": "video",
+            "maxResults": 1,
+            "key": YOUTUBE_API_KEY,
+        }, timeout=10)
+        res.raise_for_status()
+        items = res.json().get("items", [])
+        if not items:
+            raise HTTPException(status_code=404, detail="No results found.")
+
+        item       = items[0]
+        video_id   = item["id"]["videoId"]
+        title      = item["snippet"]["title"]
+        thumbnail  = item["snippet"]["thumbnails"]["high"]["url"]
+
+    except HTTPException:
+        raise
+    except requests.RequestException as e:
+        raise HTTPException(status_code=502, detail=f"YouTube search failed: {e}")
+
+    # ── Step 2: Duration ────────────────────────────────────────────
+    try:
+        det = requests.get(YOUTUBE_VIDEO_URL, params={
+            "part": "contentDetails",
+            "id": video_id,
+            "key": YOUTUBE_API_KEY,
+        }, timeout=10)
+        det.raise_for_status()
+        iso_duration = det.json()["items"][0]["contentDetails"]["duration"]
+        duration = parse_duration(iso_duration)
+
+    except Exception:
+        duration = "0:00"
+
+    # ── Step 3: Audio URL via yt-dlp ────────────────────────────────
+    try:
+        audio_url = get_audio_url(video_id)
     except Exception as e:
-        return {"error": str(e)}, 500
+        raise HTTPException(status_code=500, detail=f"Audio extraction failed: {e}")
+
+    return SearchResponse(
+        id=video_id,
+        title=title,
+        duration=duration,
+        thumbnail=thumbnail,
+        video_url=f"https://www.youtube.com/watch?v={video_id}",
+        audio_url=audio_url,
+    )
+
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 9000))
-    app.run(host="0.0.0.0", port=port)
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
