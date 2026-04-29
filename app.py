@@ -41,21 +41,16 @@ def parse_duration(iso: str) -> str:
 
 
 def get_audio_url(video_id: str) -> str:
-    ydl_opts = {
-        "format": "bestaudio/best",
-        "quiet": True,
-        "no_warnings": True,
-        "noplaylist": True,
-        "extractor_args": {
-            "youtube": {
-                "player_client": ["android"],  # android client use karo
-            }
-        },
+    url = "https://youtube-mp36.p.rapidapi.com/dl"
+    headers = {
+        "X-RapidAPI-Key": os.getenv("RAPIDAPI_KEY"),
+        "X-RapidAPI-Host": "youtube-mp36.p.rapidapi.com"
     }
-    url = f"https://www.youtube.com/watch?v={video_id}"
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(url, download=False)
-        return info["url"]
+    res = requests.get(url, headers=headers, params={"id": video_id}, timeout=30)
+    data = res.json()
+    if data.get("status") == "ok":
+        return data["link"]
+    raise Exception("RapidAPI conversion failed")
 
 
 @app.get("/search", response_model=SearchResponse)
