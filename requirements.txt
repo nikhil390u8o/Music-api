@@ -1,4 +1,5 @@
-pytubefix
-flask
+fastapi
+uvicorn
 requests
-yt-dlp==2026.3.17
+yt-dlp
+pydantic
