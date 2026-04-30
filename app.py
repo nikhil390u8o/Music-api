@@ -9,8 +9,8 @@ COOKIE_PATH = "cookies.txt"
 
 def get_stream_url(query):
     ydl_opts = {
-        # 'best' use karne se yt-dlp khud sabse best playable link dhoond lega
-        'format': 'best', 
+        # 'best' likhne se wo playable format khud dhoond lega
+        'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
         'quiet': True,
         'noplaylist': True,
         'cookiefile': COOKIE_PATH if os.path.exists(COOKIE_PATH) else None,
@@ -21,19 +21,20 @@ def get_stream_url(query):
     
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         try:
-            # Search query
+            # Search query se video info fetch karein
             info = ydl.extract_info(f"ytsearch:{query}", download=False)['entries'][0]
             
-            # Streaming link nikalne ka sahi tarika
+            # Agar format availability ka issue ho toh is tarah URL nikalte hain
             return {
                 "title": info.get('title'),
-                "url": info.get('url'), # Direct streaming URL
+                "url": info.get('url'),  # Direct streaming link
                 "duration": info.get('duration'),
                 "thumb": info.get('thumbnail'),
                 "status": "success"
             }
         except Exception as e:
             return {"status": "error", "message": str(e)}
+
 
 
 @app.get("/play")
