@@ -9,25 +9,31 @@ COOKIE_PATH = "cookies.txt"
 
 def get_stream_url(query):
     ydl_opts = {
-        # 'best' likhne se wo playable format khud dhoond lega
-        'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+        # 'best' sabse safe hai, ye wahi format uthayega jo available ho
+        'format': 'best', 
         'quiet': True,
         'noplaylist': True,
+        # Cookies aur Headers zaroori hain block se bachne ke liye
         'cookiefile': COOKIE_PATH if os.path.exists(COOKIE_PATH) else None,
         'headers': {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.5',
         }
     }
     
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         try:
-            # Search query se video info fetch karein
+            # Query se info nikalna
             info = ydl.extract_info(f"ytsearch:{query}", download=False)['entries'][0]
             
-            # Agar format availability ka issue ho toh is tarah URL nikalte hain
+            # Streaming URL nikalne ka sabse safe tarika
+            # Kabhi kabhi 'url' direct nahi milta, isliye fallback rakha hai
+            url = info.get('url') or info.get('webpage_url')
+            
             return {
                 "title": info.get('title'),
-                "url": info.get('url'),  # Direct streaming link
+                "url": url,
                 "duration": info.get('duration'),
                 "thumb": info.get('thumbnail'),
                 "status": "success"
