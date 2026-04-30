@@ -6,34 +6,33 @@ app = FastAPI()
 COOKIE_PATH = "cookies.txt"
 
 def get_stream_url(query):
-    # Format line ko poori tarah hata diya hai taaki error na aaye
     ydl_opts = {
-    # ID 18 sabse pehle (360p mp4 with audio), agar wo na mile to best dhoondo
-    'format': '18/bestvideo[ext=mp4]+bestaudio[ext=m4a]/best',
-    'quiet': True,
-    'noplaylist': True,
-    'cookiefile': 'cookies.txt',
-    'headers': {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        # 'best' ki jagah 0 (zero) use karein, ye bina check kiye link nikalta hai
+        'format': 'best', 
+        'quiet': True,
+        'noplaylist': True,
+        'cookiefile': COOKIE_PATH if os.path.exists(COOKIE_PATH) else None,
+        # Sabse important: Ye do lines YouTube check bypass karti hain
+        'youtube_include_dash_manifest': False,
+        'youtube_include_hls_manifest': True,
+        'headers': {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        }
     }
-}
-
     
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         try:
-            # Search query se video info fetch karein
-            search_result = ydl.extract_info(f"ytsearch:{query}", download=False)
-            if not search_result['entries']:
-                return {"status": "error", "message": "No video found"}
-                
-            info = search_result['entries'][0]
+            # Search logic
+            info = ydl.extract_info(f"ytsearch:{query}", download=False)['entries'][0]
             
-            # Agar direct URL na mile, toh formats list mein se pehla uthao
-            formats = info.get('formats', [])
-            # Hum wo format dhoondenge jisme audio aur video dono ho
+            # Agar best format na mile, toh list mein se koi bhi playable uthao
             url = info.get('url')
-            if not url and formats:
-                url = formats[-1].get('url') # Last format aksar best hota hai
+            if not url:
+                # Fallback to direct stream link
+                for f in info.get('formats', []):
+                    if f.get('acodec') != 'none' and f.get('vcodec') != 'none':
+                        url = f.get('url')
+                        break
 
             return {
                 "title": info.get('title'),
@@ -49,3 +48,7 @@ async def play(song: str):
     if data["status"] == "success":
         return data
     raise HTTPException(status_code=400, detail=data["message"])
+
+@app.get("/")
+def home():
+    return {"status": "Running"}
