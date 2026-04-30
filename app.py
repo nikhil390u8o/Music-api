@@ -7,31 +7,39 @@ COOKIE_PATH = "cookies.txt"
 
 def get_stream_url(query):
     ydl_opts = {
-        # Format ko bilkul open chhod diya taaki error na aaye
-        'format': 'best', 
+        'format': 'best',
         'quiet': True,
         'noplaylist': True,
         'cookiefile': COOKIE_PATH if os.path.exists(COOKIE_PATH) else None,
-        # Ye line YouTube ke naya security check bypass karti hai
-        'nocheckcertificate': True,
-        'ignoreerrors': True,
-        'logtostderr': False,
-        'geo_bypass': True,
-        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
+        # YE HAI ASLI JUGAD: YouTube Android client pretend karna
+        'extractor_args': {
+            'youtube': {
+                'player_client': ['android'],
+                'skip': ['dash', 'hls']
+            }
+        },
+        'user_agent': 'com.google.android.youtube/19.11.38 (Linux; U; Android 11; en_US; SM-G991B Build/RP1A.200720.012)'
     }
     
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         try:
-            # Info extract karein bina format check kiye
             info = ydl.extract_info(f"ytsearch:{query}", download=False)
             if not info or 'entries' not in info or not info['entries']:
-                return {"status": "error", "message": "Video not found or IP Blocked"}
+                return {"status": "error", "message": "Search Failed"}
                 
             video_data = info['entries'][0]
             
+            # Agar best format hide ho gaya ho, toh formats list scan karein
+            url = video_data.get('url')
+            if not url:
+                for f in video_data.get('formats', []):
+                    if f.get('url'):
+                        url = f.get('url')
+                        break
+
             return {
                 "title": video_data.get('title'),
-                "url": video_data.get('url'), # Direct Stream URL
+                "url": url,
                 "status": "success"
             }
         except Exception as e:
@@ -42,5 +50,4 @@ async def play(song: str):
     data = get_stream_url(song)
     if data["status"] == "success" and data["url"]:
         return data
-    # Agar format error phir bhi aaye toh manual message
-    raise HTTPException(status_code=400, detail="YouTube blocked the request. Try refreshing cookies.txt")
+    raise HTTPException(status_code=400, detail=data["message"])
