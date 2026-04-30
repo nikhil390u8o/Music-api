@@ -8,12 +8,16 @@ COOKIE_PATH = "cookies.txt"
 def get_stream_url(query):
     # Format line ko poori tarah hata diya hai taaki error na aaye
     ydl_opts = {
-        'quiet': True,
-        'noplaylist': True,
-        'cookiefile': COOKIE_PATH if os.path.exists(COOKIE_PATH) else None,
-        'extract_flat': False, # Isse info poori niklegi
-        'skip_download': True,
+    # ID 18 sabse pehle (360p mp4 with audio), agar wo na mile to best dhoondo
+    'format': '18/bestvideo[ext=mp4]+bestaudio[ext=m4a]/best',
+    'quiet': True,
+    'noplaylist': True,
+    'cookiefile': 'cookies.txt',
+    'headers': {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
     }
+}
+
     
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         try:
