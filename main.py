@@ -23,11 +23,13 @@ threading.Thread(target=keep_alive, daemon=True).start()
 # ─── yt-dlp se stream URLs nikalo ────────────────────────────────────────────
 def get_stream(query: str):
     ydl_opts = {
-        "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best",
-        "quiet": True,
-        "noplaylist": True,
-        "geo_bypass": True,
-    }
+    "format": "best",
+    "quiet": True,
+    "no_warnings": True,
+    "extract_flat": "in_playlist", # Search process ko fast karta hai
+    "source_address": "0.0.0.0",
+}
+
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(f"ytsearch:{query}", download=False)
@@ -77,5 +79,5 @@ def stream():
         return {"error": str(e)}, 500
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 9000))
+    port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port)
