@@ -21,7 +21,7 @@ def keep_alive():
 
 threading.Thread(target=keep_alive, daemon=True).start()
 
-COOKIE_PATH = "/etc/secrets/cookies.txt"
+COOKIE_PATH = None
 
 USER_AGENTS = [
     'Mozilla/5.0 (Linux; Android 12; Pixel 6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
