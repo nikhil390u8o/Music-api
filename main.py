@@ -22,24 +22,40 @@ threading.Thread(target=keep_alive, daemon=True).start()
 # ─── Piped Instances ──────────────────────────────────────────────────────────
 PIPED_INSTANCES = [
     "https://pipedapi.kavin.rocks",
-    "https://piped-api.garudalinux.org",
+    "https://pipedapi.tokhmi.xyz",
+    "https://piped-api.codeberg.page",
     "https://api.piped.projectsegfau.lt",
-    "https://pipedapi.leptons.xyz",
+    "https://piped.video/api",
+    "https://watchapi.whatever.social",
 ]
-
 # ─── Search YouTube via Piped ─────────────────────────────────────────────────
 def search_piped(query):
     for instance in PIPED_INSTANCES:
         try:
+            # Pehle music_songs try karo
             r = requests.get(
                 f"{instance}/search",
                 params={"q": query, "filter": "music_songs"},
                 timeout=5
             )
             results = r.json().get("items", [])
+            
+            # Agar empty toh all filter try karo
+            if not results:
+                r = requests.get(
+                    f"{instance}/search",
+                    params={"q": query, "filter": "all"},
+                    timeout=5
+                )
+                results = r.json().get("items", [])
+
             if results:
-                video_id = results[0]["url"].split("?v=")[-1]
-                return video_id
+                # video ID extract karo safely
+                url = results[0].get("url", "")
+                if "?v=" in url:
+                    return url.split("?v=")[-1]
+                elif "v=" in url:
+                    return url.split("v=")[-1]
         except:
             continue
     return None
