@@ -1,141 +1,333 @@
-from flask import Flask, request, jsonify
+"""
+╔══════════════════════════════════════════╗
+   YouTube Search + Download API
+   Built with FastAPI + yt-dlp
+   Deploy: Railway / Render
+╚══════════════════════════════════════════╝
+"""
+
 import os
-import requests
-import threading
-import time
+import asyncio
+import hashlib
+from pathlib import Path
+from contextlib import asynccontextmanager
 
-app = Flask(__name__)
+import yt_dlp
+from fastapi import FastAPI, HTTPException, Query, BackgroundTasks
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 
-# Keep-alive for Render
-def keep_alive():
-    url = os.environ.get("RENDER_URL", "")
-    while True:
-        time.sleep(840)
+# ─────────────────────────────────────────────
+#  CONFIG
+# ─────────────────────────────────────────────
+DOWNLOAD_DIR = Path("downloads")
+DOWNLOAD_DIR.mkdir(exist_ok=True)
+
+MAX_CACHE_FILES = 50   # zyada files hone par purani delete ho jaayengi
+
+
+# ─────────────────────────────────────────────
+#  CLEANUP OLD FILES (background)
+# ─────────────────────────────────────────────
+def cleanup_old_files():
+    files = sorted(DOWNLOAD_DIR.glob("*"), key=lambda f: f.stat().st_mtime)
+    while len(files) > MAX_CACHE_FILES:
         try:
-            if url:
-                requests.get(url, timeout=10)
+            files.pop(0).unlink()
         except:
             pass
 
-threading.Thread(target=keep_alive, daemon=True).start()
 
-# ─── Piped Instances ──────────────────────────────────────────────────────────
-PIPED_INSTANCES = [
-    "https://pipedapi.kavin.rocks",
-    "https://pipedapi.tokhmi.xyz",
-    "https://piped-api.codeberg.page",
-    "https://api.piped.projectsegfau.lt",
-    "https://piped.video/api",
-    "https://watchapi.whatever.social",
-]
-# ─── Search YouTube via Piped ─────────────────────────────────────────────────
-def search_piped(query):
-    for instance in PIPED_INSTANCES:
-        try:
-            # Pehle music_songs try karo
-            r = requests.get(
-                f"{instance}/search",
-                params={"q": query, "filter": "music_songs"},
-                timeout=5
-            )
-            results = r.json().get("items", [])
-            
-            # Agar empty toh all filter try karo
-            if not results:
-                r = requests.get(
-                    f"{instance}/search",
-                    params={"q": query, "filter": "all"},
-                    timeout=5
-                )
-                results = r.json().get("items", [])
+# ─────────────────────────────────────────────
+#  APP INIT
+# ─────────────────────────────────────────────
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    DOWNLOAD_DIR.mkdir(exist_ok=True)
+    yield
 
-            if results:
-                # video ID extract karo safely
-                url = results[0].get("url", "")
-                if "?v=" in url:
-                    return url.split("?v=")[-1]
-                elif "v=" in url:
-                    return url.split("v=")[-1]
-        except:
-            continue
-    return None
+app = FastAPI(
+    title="YouTube API",
+    description="Search, Audio & Video download API powered by yt-dlp",
+    version="1.0.0",
+    lifespan=lifespan,
+)
 
-# ─── Get Streams via Piped ────────────────────────────────────────────────────
-def get_piped_streams(video_id):
-    for instance in PIPED_INSTANCES:
-        try:
-            r = requests.get(f"{instance}/streams/{video_id}", timeout=5)
-            data = r.json()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-            # Video URL - best mp4
-            video_streams = data.get("videoStreams", [])
-            video_url = next(
-                (s["url"] for s in video_streams if s.get("mimeType", "").startswith("video/mp4")),
-                None
-            )
 
-            # Audio URL - best mp4
-            audio_streams = data.get("audioStreams", [])
-            audio_url = next(
-                (s["url"] for s in audio_streams if s.get("mimeType", "").startswith("audio/mp4")),
-                None
-            )
+# ─────────────────────────────────────────────
+#  HELPERS
+# ─────────────────────────────────────────────
+def _short_id(text: str) -> str:
+    return hashlib.md5(text.encode()).hexdigest()[:10]
 
-            if video_url or audio_url:
-                return {
-                    "title": data.get("title", "Unknown"),
-                    "duration": data.get("duration", 0),
-                    "thumbnail": data.get("thumbnailUrl", ""),
-                    "video_url": video_url or audio_url,
-                    "audio_url": audio_url or video_url,
-                }
-        except:
-            continue
-    return None
 
-# ─── Main Function ────────────────────────────────────────────────────────────
-def get_stream(query: str):
-    video_id = search_piped(query)
-    if not video_id:
-        raise Exception("No results found")
+def _run_ydl(opts: dict, url: str):
+    """Synchronous yt-dlp call — executor mein run hoga."""
+    with yt_dlp.YoutubeDL(opts) as ydl:
+        return ydl.extract_info(url, download=True)
 
-    data = get_piped_streams(video_id)
-    if not data:
-        raise Exception("Could not get stream URLs")
 
+def _run_ydl_no_dl(opts: dict, url: str):
+    with yt_dlp.YoutubeDL(opts) as ydl:
+        return ydl.extract_info(url, download=False)
+
+
+def _fmt_duration(seconds: int) -> str:
+    if not seconds:
+        return "0:00"
+    m, s = divmod(int(seconds), 60)
+    h, m = divmod(m, 60)
+    return f"{h}:{m:02}:{s:02}" if h else f"{m}:{s:02}"
+
+
+def _entry_to_dict(entry: dict) -> dict:
+    vid_id = entry.get("id", "")
     return {
-        "id": video_id,
-        "title": data["title"],
-        "duration": data["duration"],
-        "thumbnail": data["thumbnail"],
-        "audio_url": data["audio_url"],
-        "video_url": data["video_url"],
+        "id":         vid_id,
+        "title":      entry.get("title", "Unknown"),
+        "channel":    entry.get("uploader") or entry.get("channel", ""),
+        "duration":   int(entry.get("duration") or 0),
+        "duration_fmt": _fmt_duration(entry.get("duration")),
+        "views":      entry.get("view_count", 0),
+        "thumbnail":  f"https://i.ytimg.com/vi/{vid_id}/hqdefault.jpg",
+        "url":        f"https://www.youtube.com/watch?v={vid_id}",
     }
 
-# ─── Routes ───────────────────────────────────────────────────────────────────
-@app.route("/")
-def index():
-    return {"status": "Music API running 🎵"}
 
-@app.route("/stream")
-def stream():
-    query = request.args.get("query", "").strip()
-    if not query:
-        return jsonify({"error": "query required"}), 400
+# ─────────────────────────────────────────────
+#  ROOT
+# ─────────────────────────────────────────────
+@app.get("/")
+async def root():
+    return {
+        "name":    "YouTube API",
+        "version": "1.0.0",
+        "author":  "ARU x API",
+        "endpoints": {
+            "search":   "/search?query=<query>&limit=<1-10>",
+            "audio":    "/audio?query=<query or yt url>",
+            "video":    "/video?query=<query or yt url>",
+            "info":     "/info?query=<query or yt url>",
+            "download": "/download?file=<filename>  (internal use)",
+        },
+    }
+
+
+# ─────────────────────────────────────────────
+#  1. SEARCH
+#  GET /search?query=shape+of+you&limit=5
+# ─────────────────────────────────────────────
+@app.get("/search")
+async def search(
+    query: str = Query(..., description="Search query"),
+    limit: int = Query(5, ge=1, le=10, description="Number of results (1-10)"),
+):
+    loop = asyncio.get_event_loop()
+    opts = {
+        "quiet":        True,
+        "no_warnings":  True,
+        "noplaylist":   True,
+        "extract_flat": True,
+    }
 
     try:
-        data = get_stream(query)
-        return jsonify({
-            "id": data["id"],
-            "title": data["title"],
-            "duration": data["duration"],
-            "thumbnail": data["thumbnail"],
-            "audio_url": data["audio_url"],
-            "video_url": data["video_url"],
-        })
+        info = await loop.run_in_executor(
+            None, _run_ydl_no_dl, opts, f"ytsearch{limit}:{query}"
+        )
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        raise HTTPException(502, f"Search failed: {e}")
 
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 9000))
-    app.run(host="0.0.0.0", port=port)
+    entries = info.get("entries") or []
+    results = [_entry_to_dict(e) for e in entries if e]
+
+    return {
+        "query":   query,
+        "count":   len(results),
+        "results": results,
+    }
+
+
+# ─────────────────────────────────────────────
+#  2. INFO
+#  GET /info?query=<yt url or search term>
+# ─────────────────────────────────────────────
+@app.get("/info")
+async def info(
+    query: str = Query(..., description="YouTube URL or search query"),
+):
+    loop = asyncio.get_event_loop()
+
+    is_url = query.startswith("http")
+    url    = query if is_url else f"ytsearch1:{query}"
+
+    opts = {
+        "quiet":       True,
+        "no_warnings": True,
+        "noplaylist":  True,
+        "extract_flat": not is_url,
+    }
+
+    try:
+        raw = await loop.run_in_executor(None, _run_ydl_no_dl, opts, url)
+    except Exception as e:
+        raise HTTPException(502, f"Info fetch failed: {e}")
+
+    # Search result → first entry
+    if not is_url and "entries" in raw:
+        entries = raw.get("entries") or []
+        if not entries:
+            raise HTTPException(404, "No results found")
+        raw = entries[0]
+
+    return _entry_to_dict(raw)
+
+
+# ─────────────────────────────────────────────
+#  3. AUDIO DOWNLOAD
+#  GET /audio?query=<yt url or search>
+# ─────────────────────────────────────────────
+@app.get("/audio")
+async def audio(
+    query: str = Query(..., description="YouTube URL or search query"),
+    background_tasks: BackgroundTasks = None,
+):
+    loop   = asyncio.get_event_loop()
+    is_url = query.startswith("http")
+    url    = query if is_url else f"ytsearch1:{query}"
+    fid    = _short_id(query)
+    out    = DOWNLOAD_DIR / f"{fid}.mp3"
+
+    # Cache check
+    if not out.exists():
+        opts = {
+            "quiet":           True,
+            "no_warnings":     True,
+            "noplaylist":      True,
+            "format":          "bestaudio/best",
+            "outtmpl":         str(DOWNLOAD_DIR / f"{fid}.%(ext)s"),
+            "postprocessors":  [{
+                "key":            "FFmpegExtractAudio",
+                "preferredcodec": "mp3",
+                "preferredquality": "192",
+            }],
+        }
+        try:
+            await loop.run_in_executor(None, _run_ydl, opts, url)
+        except Exception as e:
+            raise HTTPException(502, f"Audio download failed: {e}")
+
+        if not out.exists():
+            raise HTTPException(500, "File not created. ffmpeg installed hai?")
+
+    if background_tasks:
+        background_tasks.add_task(cleanup_old_files)
+
+    return FileResponse(
+        path=out,
+        media_type="audio/mpeg",
+        filename=out.name,
+        headers={"Content-Disposition": f'attachment; filename="{out.name}"'},
+    )
+
+
+# ─────────────────────────────────────────────
+#  4. VIDEO DOWNLOAD
+#  GET /video?query=<yt url or search>
+# ─────────────────────────────────────────────
+@app.get("/video")
+async def video(
+    query:   str = Query(..., description="YouTube URL or search query"),
+    quality: str = Query("720", description="Quality: 360, 480, 720, 1080"),
+    background_tasks: BackgroundTasks = None,
+):
+    loop   = asyncio.get_event_loop()
+    is_url = query.startswith("http")
+    url    = query if is_url else f"ytsearch1:{query}"
+    fid    = _short_id(f"{query}_{quality}")
+    out    = DOWNLOAD_DIR / f"{fid}.mp4"
+
+    if not out.exists():
+        fmt = f"bestvideo[height<={quality}][ext=mp4]+bestaudio[ext=m4a]/best[height<={quality}][ext=mp4]/best"
+        opts = {
+            "quiet":       True,
+            "no_warnings": True,
+            "noplaylist":  True,
+            "format":      fmt,
+            "outtmpl":     str(DOWNLOAD_DIR / f"{fid}.%(ext)s"),
+            "merge_output_format": "mp4",
+        }
+        try:
+            await loop.run_in_executor(None, _run_ydl, opts, url)
+        except Exception as e:
+            raise HTTPException(502, f"Video download failed: {e}")
+
+        if not out.exists():
+            raise HTTPException(500, "File not created. ffmpeg installed hai?")
+
+    if background_tasks:
+        background_tasks.add_task(cleanup_old_files)
+
+    return FileResponse(
+        path=out,
+        media_type="video/mp4",
+        filename=out.name,
+        headers={"Content-Disposition": f'attachment; filename="{out.name}"'},
+    )
+
+
+# ─────────────────────────────────────────────
+#  5. STREAM URL (direct link — no download)
+#  GET /stream?query=<yt url or search>&type=audio|video
+# ─────────────────────────────────────────────
+@app.get("/stream")
+async def stream_url(
+    query: str = Query(..., description="YouTube URL or search query"),
+    type:  str = Query("audio", description="audio or video"),
+):
+    loop   = asyncio.get_event_loop()
+    is_url = query.startswith("http")
+    url    = query if is_url else f"ytsearch1:{query}"
+
+    if type == "video":
+        fmt = "bestvideo[ext=mp4]+bestaudio/best[ext=mp4]/best"
+    else:
+        fmt = "bestaudio/best"
+
+    opts = {
+        "quiet":       True,
+        "no_warnings": True,
+        "noplaylist":  True,
+        "format":      fmt,
+        "extract_flat": False,
+    }
+
+    try:
+        raw = await loop.run_in_executor(None, _run_ydl_no_dl, opts, url)
+    except Exception as e:
+        raise HTTPException(502, f"Stream URL fetch failed: {e}")
+
+    if not is_url and "entries" in raw:
+        entries = raw.get("entries") or []
+        if not entries:
+            raise HTTPException(404, "No results")
+        raw = entries[0]
+
+    direct_url = raw.get("url") or raw.get("webpage_url")
+    if not direct_url:
+        raise HTTPException(404, "Stream URL nahi mila")
+
+    return {
+        "title":      raw.get("title", "Unknown"),
+        "type":       type,
+        "duration":   int(raw.get("duration") or 0),
+        "thumbnail":  f"https://i.ytimg.com/vi/{raw.get('id', '')}/hqdefault.jpg",
+        "stream_url": direct_url,
+    }
+
