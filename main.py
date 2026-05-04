@@ -129,8 +129,11 @@ MASTER_KEY = "aru-master-7450385463"
 # ─────────────────────────────────────────────
 #  COOKIES
 # ─────────────────────────────────────────────
-COOKIES_FILE = "cookies.txt" if os.path.exists("cookies.txt") else None
+from pathlib import Path
 
+# Absolute path — file hamesha milegi
+_BASE_DIR = Path(__file__).parent
+COOKIES_FILE = str(_BASE_DIR / "cookies.txt") if (_BASE_DIR / "cookies.txt").exists() else None
 def _base_opts() -> dict:
     opts = {
         "quiet":       True,
