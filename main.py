@@ -340,17 +340,17 @@ async def video(
     if not out.exists():
         # Flexible format — jo bhi available ho usse mp4 mein convert karo
         fmt = f"bestvideo[height<={quality}]+bestaudio/bestvideo+bestaudio/best"
-
-opts = {
-    **_base_opts(),
-    "format": fmt,
-    "outtmpl": str(DOWNLOAD_DIR / f"{fid}.%(ext)s"),
-    "merge_output_format": "mp4",
-    "postprocessors": [{
-        "key": "FFmpegVideoConvertor",
-        "preferredformat": "mp4",
-    }],
-}
+        
+        opts = {    # ✅ Now properly indented inside the function
+            **_base_opts(),
+            "format": fmt,
+            "outtmpl": str(DOWNLOAD_DIR / f"{fid}.%(ext)s"),
+            "merge_output_format": "mp4",
+            "postprocessors": [{
+                "key": "FFmpegVideoConvertor",
+                "preferredformat": "mp4",
+            }],
+        }
         try:
             await loop.run_in_executor(None, _run_ydl, opts, url)
         except Exception as e:
