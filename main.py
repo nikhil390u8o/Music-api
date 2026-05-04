@@ -340,8 +340,9 @@ async def video(
     if not out.exists():
         # Flexible format — jo bhi available ho usse mp4 mein convert karo
         fmt = (
-            f"bestvideo[height<={quality}]+bestaudio/best[height<={quality}]"
-            f"/bestvideo+bestaudio/best"
+            f"bestvideo[height<={quality}]+bestaudio"
+            f"/bestvideo+bestaudio"
+            f"/best"
         )
         opts = {
             **_base_opts(),
