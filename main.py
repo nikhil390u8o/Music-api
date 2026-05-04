@@ -131,9 +131,10 @@ MASTER_KEY = "aru-master-7450385463"
 # ─────────────────────────────────────────────
 from pathlib import Path
 
-# Absolute path — file hamesha milegi
 _BASE_DIR = Path(__file__).parent
-COOKIES_FILE = str(_BASE_DIR / "cookies.txt") if (_BASE_DIR / "cookies.txt").exists() else None
+_cf = _BASE_DIR / "cookies.txt"
+print(f"[COOKIES] Path: {_cf} | Exists: {_cf.exists()}")
+COOKIES_FILE = str(_cf) if _cf.exists() else None
 def _base_opts() -> dict:
     opts = {
         "quiet":       True,
