@@ -13,7 +13,7 @@ from pathlib import Path
 from contextlib import asynccontextmanager
 
 import yt_dlp
-from fastapi import FastAPI, HTTPException, Query, BackgroundTasks
+from fastapi import FastAPI, HTTPException, Query, BackgroundTasks, Header
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -24,6 +24,16 @@ DOWNLOAD_DIR = Path("downloads")
 DOWNLOAD_DIR.mkdir(exist_ok=True)
 
 MAX_CACHE_FILES = 50   # zyada files hone par purani delete ho jaayengi
+
+# ─────────────────────────────────────────────
+#  API KEY — repo mein hardcode hai
+#  play.py mein bhi yahi key daalni hai
+# ─────────────────────────────────────────────
+API_KEY = "24bc91436add00eeda4d0b50b9f073fc"
+
+def _check_key(x_api_key: str = None):
+    if x_api_key != API_KEY:
+        raise HTTPException(status_code=401, detail="Invalid or missing API key. Header: x-api-key")
 
 
 # ─────────────────────────────────────────────
@@ -128,7 +138,9 @@ async def root():
 async def search(
     query: str = Query(..., description="Search query"),
     limit: int = Query(5, ge=1, le=10, description="Number of results (1-10)"),
+    x_api_key: str = Header(None, description="API Key"),
 ):
+    _check_key(x_api_key)
     loop = asyncio.get_event_loop()
     opts = {
         "quiet":        True,
@@ -161,7 +173,9 @@ async def search(
 @app.get("/info")
 async def info(
     query: str = Query(..., description="YouTube URL or search query"),
+    x_api_key: str = Header(None, description="API Key"),
 ):
+    _check_key(x_api_key)
     loop = asyncio.get_event_loop()
 
     is_url = query.startswith("http")
@@ -197,7 +211,9 @@ async def info(
 async def audio(
     query: str = Query(..., description="YouTube URL or search query"),
     background_tasks: BackgroundTasks = None,
+    x_api_key: str = Header(None, description="API Key"),
 ):
+    _check_key(x_api_key)
     loop   = asyncio.get_event_loop()
     is_url = query.startswith("http")
     url    = query if is_url else f"ytsearch1:{query}"
@@ -246,7 +262,9 @@ async def video(
     query:   str = Query(..., description="YouTube URL or search query"),
     quality: str = Query("720", description="Quality: 360, 480, 720, 1080"),
     background_tasks: BackgroundTasks = None,
+    x_api_key: str = Header(None, description="API Key"),
 ):
+    _check_key(x_api_key)
     loop   = asyncio.get_event_loop()
     is_url = query.startswith("http")
     url    = query if is_url else f"ytsearch1:{query}"
@@ -286,48 +304,25 @@ async def video(
 #  5. STREAM URL (direct link — no download)
 #  GET /stream?query=<yt url or search>&type=audio|video
 # ─────────────────────────────────────────────
+
+# ─────────────────────────────────────────────
+#  5. STREAM (redirects to audio/video download)
+#  GET /stream?query=...&type=audio|video
+# ─────────────────────────────────────────────
 @app.get("/stream")
 async def stream_url(
-    query: str = Query(..., description="YouTube URL or search query"),
-    type:  str = Query("audio", description="audio or video"),
+    query:   str = Query(..., description="YouTube URL or search query"),
+    type:    str = Query("audio", description="audio or video"),
+    quality: str = Query("720", description="Video quality: 360, 480, 720, 1080"),
+    background_tasks: BackgroundTasks = None,
+    x_api_key: str = Header(None, description="API Key"),
 ):
-    loop   = asyncio.get_event_loop()
-    is_url = query.startswith("http")
-    url    = query if is_url else f"ytsearch1:{query}"
-
+    _check_key(x_api_key)
+    """
+    YouTube direct CDN URL bot-check ki wajah se kaam nahi karti.
+    /stream internally /audio ya /video download karke file serve karta hai.
+    """
     if type == "video":
-        fmt = "bestvideo[ext=mp4]+bestaudio/best[ext=mp4]/best"
+        return await video(query=query, quality=quality, background_tasks=background_tasks)
     else:
-        fmt = "bestaudio/best"
-
-    opts = {
-        "quiet":       True,
-        "no_warnings": True,
-        "noplaylist":  True,
-        "format":      fmt,
-        "extract_flat": False,
-    }
-
-    try:
-        raw = await loop.run_in_executor(None, _run_ydl_no_dl, opts, url)
-    except Exception as e:
-        raise HTTPException(502, f"Stream URL fetch failed: {e}")
-
-    if not is_url and "entries" in raw:
-        entries = raw.get("entries") or []
-        if not entries:
-            raise HTTPException(404, "No results")
-        raw = entries[0]
-
-    direct_url = raw.get("url") or raw.get("webpage_url")
-    if not direct_url:
-        raise HTTPException(404, "Stream URL nahi mila")
-
-    return {
-        "title":      raw.get("title", "Unknown"),
-        "type":       type,
-        "duration":   int(raw.get("duration") or 0),
-        "thumbnail":  f"https://i.ytimg.com/vi/{raw.get('id', '')}/hqdefault.jpg",
-        "stream_url": direct_url,
-    }
-
+        return await audio(query=query, background_tasks=background_tasks)
