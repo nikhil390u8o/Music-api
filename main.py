@@ -143,7 +143,7 @@ def _base_opts() -> dict:
         # ✅ android_vr client — JS runtime nahi maangta, sab formats milte hain
         "extractor_args": {
             "youtube": {
-                "player_client": ["android_vr"],
+                "player_client": ["ios"],
             }
         },
         "ffmpeg_location": _ffmpeg_exe,
