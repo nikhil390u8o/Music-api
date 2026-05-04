@@ -373,7 +373,6 @@ async def video(
         background_tasks.add_task(cleanup_old_files)
 
     return FileResponse(out, media_type="video/mp4", filename=out.name)
-
 # ─────────────────────────────────────────────
 #  5. STREAM URL (direct link — no download)
 #  GET /stream?query=<yt url or search>&type=audio|video
