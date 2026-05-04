@@ -131,11 +131,11 @@ MASTER_KEY = "aru-master-7450385463"   # apni marzi se badal lo
 COOKIES_FILE = "cookies.txt" if os.path.exists("cookies.txt") else None
 
 def _base_opts() -> dict:
-    """Common yt-dlp options — cookies automatically add hoti hain agar file hai."""
     opts = {
         "quiet":       True,
         "no_warnings": True,
         "noplaylist":  True,
+        "extractor_args": {"youtube": {"player_client": ["android", "web"]}},  # ✅ JS runtime bypass
     }
     if COOKIES_FILE:
         opts["cookiefile"] = COOKIES_FILE
