@@ -209,6 +209,26 @@ async def revoke_key(
 # ─────────────────────────────────────────────
 #  1. SEARCH
 # ─────────────────────────────────────────────
+@app.get("/test")
+async def test_formats(x_api_key: str = Header(None)):
+    _check_key(x_api_key)
+    import yt_dlp
+    results = {}
+    opts = {
+        **_base_opts(),
+        "quiet": False,
+        "listformats": True,
+    }
+    try:
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            info = ydl.extract_info("https://www.youtube.com/watch?v=tFNWHLEIiJ0", download=False)
+            formats = info.get("formats", [])
+            results = [{"id": f["format_id"], "ext": f["ext"], "res": f.get("resolution")} for f in formats]
+    except Exception as e:
+        return {"error": str(e)}
+    return {"formats": results}
+
+
 @app.get("/search")
 async def search(
     query: str = Query(...),
