@@ -323,6 +323,8 @@ async def audio(
 #  4. VIDEO DOWNLOAD
 #  GET /video?query=<yt url or search>
 # ─────────────────────────────────────────────
+# In your Render API's main.py, update the video endpoint:
+
 @app.get("/video")
 async def video(
     query:   str = Query(..., description="YouTube URL or search query"),
@@ -338,26 +340,42 @@ async def video(
     out    = DOWNLOAD_DIR / f"{fid}.mp4"
 
     if not out.exists():
-        # Flexible format — jo bhi available ho usse mp4 mein convert karo
-        fmt = f"bestvideo[height<={quality}]+bestaudio/bestvideo+bestaudio/best"
-        
-        opts = {    # ✅ Now properly indented inside the function
+        # ✅ Use mobile client format to bypass bot detection
+        opts = {
             **_base_opts(),
-            "format": fmt,
+            "format": f"best[height<={quality}]/bestvideo[height<={quality}]+bestaudio/best",
             "outtmpl": str(DOWNLOAD_DIR / f"{fid}.%(ext)s"),
             "merge_output_format": "mp4",
+            "extractor_args": {
+                "youtube": {
+                    "player_client": ["android", "ios"],  # Mobile clients
+                    "skip": ["webpage"],  # Skip webpage download
+                }
+            },
             "postprocessors": [{
                 "key": "FFmpegVideoConvertor",
                 "preferredformat": "mp4",
             }],
+            # For debugging
+            "verbose": True,
         }
         try:
-            await loop.run_in_executor(None, _run_ydl, opts, url)
+            info = await loop.run_in_executor(None, _run_ydl, opts, url)
+            
+            # Check if file exists and has proper size
+            if out.exists():
+                size_mb = out.stat().st_size / (1024 * 1024)
+                print(f"✅ Downloaded: {size_mb:.1f}MB")
+                if size_mb < 1:  # Less than 1MB? Something's wrong
+                    out.unlink()  # Delete corrupt file
+                    raise HTTPException(500, "Downloaded file too small, likely blocked by YouTube")
+            else:
+                raise HTTPException(500, "File not created")
+                
         except Exception as e:
+            if "ffmpeg" in str(e).lower():
+                raise HTTPException(500, "FFmpeg not installed on server!")
             raise HTTPException(502, f"Video download failed: {e}")
-
-        if not out.exists():
-            raise HTTPException(500, "File not created. ffmpeg installed hai?")
 
     if background_tasks:
         background_tasks.add_task(cleanup_old_files)
