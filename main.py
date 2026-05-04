@@ -135,7 +135,7 @@ def _base_opts() -> dict:
         "quiet":       True,
         "no_warnings": True,
         "noplaylist":  True,
-        "extractor_args": {"youtube": {"player_client": ["android", "web"]}},  # ✅ JS runtime bypass
+        "extractor_args": {"youtube": {"player_client": ["android", "web"]}},  # ✅ ADD
     }
     if COOKIES_FILE:
         opts["cookiefile"] = COOKIES_FILE
@@ -333,11 +333,9 @@ async def video(
     x_api_key: str = Header(None),
 ):
     _check_key(x_api_key)
-
     loop = asyncio.get_event_loop()
     is_url = query.startswith("http")
     url = query if is_url else f"ytsearch1:{query}"
-
     fid = _short_id(f"{query}_{quality}")
     out = DOWNLOAD_DIR / f"{fid}.mp4"
 
@@ -346,15 +344,17 @@ async def video(
             background_tasks.add_task(cleanup_old_files)
         return FileResponse(out, media_type="video/mp4", filename=out.name)
 
-    # ✅ FIXED FORMAT STRING
-    fmt = f"bestvideo[height<={quality}]+bestaudio/bestvideo[height<={quality}]/best[height<={quality}]/best"
+    # ✅ FIXED — ext restriction nahi, ffmpeg merge karega
+    fmt = (
+        f"bestvideo[height<={quality}]+bestaudio/"
+        f"bestvideo[height<={quality}]/best[height<={quality}]/best"
+    )
 
     opts = {
         **_base_opts(),
         "format": fmt,
         "outtmpl": str(DOWNLOAD_DIR / f"{fid}.%(ext)s"),
         "merge_output_format": "mp4",
-        # ✅ YEH ADD KAR — ext restriction hata
         "postprocessors": [{
             "key": "FFmpegVideoConvertor",
             "preferedformat": "mp4",
