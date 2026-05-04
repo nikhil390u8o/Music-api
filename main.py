@@ -17,7 +17,11 @@ from fastapi import FastAPI, HTTPException, Query, BackgroundTasks, Header
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 import imageio_ffmpeg
-os.environ["PATH"] += os.pathsep + os.path.dirname(imageio_ffmpeg.get_ffmpeg_exe())
+_ffmpeg_path = imageio_ffmpeg.get_ffmpeg_exe()
+os.environ["PATH"] += os.pathsep + os.path.dirname(_ffmpeg_path)
+
+# ✅ yt-dlp ko explicitly bata do ffmpeg kahan hai
+os.environ["FFMPEG_LOCATION"] = _ffmpeg_path
 # ─────────────────────────────────────────────
 #  CONFIG
 # ─────────────────────────────────────────────
@@ -136,7 +140,8 @@ def _base_opts() -> dict:
         "quiet":       True,
         "no_warnings": True,
         "noplaylist":  True,
-        "extractor_args": {"youtube": {"player_client": ["android", "web"]}},  # ✅ ADD
+        "extractor_args": {"youtube": {"player_client": ["android", "web"]}},
+        "ffmpeg_location": imageio_ffmpeg.get_ffmpeg_exe(),  # ✅ YEH ADD KAR
     }
     if COOKIES_FILE:
         opts["cookiefile"] = COOKIES_FILE
