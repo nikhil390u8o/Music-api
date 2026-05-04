@@ -327,64 +327,123 @@ async def audio(
 
 @app.get("/video")
 async def video(
-    query:   str = Query(..., description="YouTube URL or search query"),
+    query: str = Query(..., description="YouTube URL or search query"),
     quality: str = Query("720", description="Quality: 360, 480, 720, 1080"),
     background_tasks: BackgroundTasks = None,
     x_api_key: str = Header(None, description="API Key"),
 ):
     _check_key(x_api_key)
-    loop   = asyncio.get_event_loop()
+    loop = asyncio.get_event_loop()
     is_url = query.startswith("http")
-    url    = query if is_url else f"ytsearch1:{query}"
-    fid    = _short_id(f"{query}_{quality}")
-    out    = DOWNLOAD_DIR / f"{fid}.mp4"
+    url = query if is_url else f"ytsearch1:{query}"
+    fid = _short_id(f"{query}_{quality}")
+    out = DOWNLOAD_DIR / f"{fid}.mp4"
 
-    if not out.exists():
-        # ✅ Use mobile client format to bypass bot detection
-        opts = {
-            **_base_opts(),
-            "format": f"best[height<={quality}]/bestvideo[height<={quality}]+bestaudio/best",
-            "outtmpl": str(DOWNLOAD_DIR / f"{fid}.%(ext)s"),
-            "merge_output_format": "mp4",
-            "extractor_args": {
-                "youtube": {
-                    "player_client": ["android", "ios"],  # Mobile clients
-                    "skip": ["webpage"],  # Skip webpage download
-                }
-            },
-            "postprocessors": [{
-                "key": "FFmpegVideoConvertor",
-                "preferredformat": "mp4",
-            }],
-            # For debugging
-            "verbose": True,
-        }
+    if out.exists() and out.stat().st_size > 1024 * 1024:  # > 1MB cache check
+        if background_tasks:
+            background_tasks.add_task(cleanup_old_files)
+        return FileResponse(
+            path=out,
+            media_type="video/mp4",
+            filename=out.name,
+            headers={"Content-Disposition": f'attachment; filename="{out.name}"'},
+        )
+
+    # Try multiple strategies in order
+    strategies = [
+        # Strategy 1: Android client (works for most videos)
+        {
+            "name": "android_client",
+            "opts": {
+                **_base_opts(),
+                "format": f"best[height<={quality}]/bestvideo[height<={quality}]+bestaudio/best",
+                "outtmpl": str(DOWNLOAD_DIR / f"{fid}.%(ext)s"),
+                "merge_output_format": "mp4",
+                "extractor_args": {
+                    "youtube": {
+                        "player_client": ["android"],
+                    }
+                },
+                "postprocessors": [{
+                    "key": "FFmpegVideoConvertor",
+                    "preferredformat": "mp4",
+                }],
+            }
+        },
+        # Strategy 2: iOS client (different access pattern)
+        {
+            "name": "ios_client",
+            "opts": {
+                **_base_opts(),
+                "format": f"best[height<={quality}]/bestvideo[height<={quality}]+bestaudio/best",
+                "outtmpl": str(DOWNLOAD_DIR / f"{fid}.%(ext)s"),
+                "merge_output_format": "mp4",
+                "extractor_args": {
+                    "youtube": {
+                        "player_client": ["ios"],
+                    }
+                },
+                "postprocessors": [{
+                    "key": "FFmpegVideoConvertor",
+                    "preferredformat": "mp4",
+                }],
+            }
+        },
+        # Strategy 3: Format 18 (360p, always available - fallback)
+        {
+            "name": "format18",
+            "opts": {
+                **_base_opts(),
+                "format": "18/best",
+                "outtmpl": str(DOWNLOAD_DIR / f"{fid}.%(ext)s"),
+                "merge_output_format": "mp4",
+                "postprocessors": [{
+                    "key": "FFmpegVideoConvertor",
+                    "preferredformat": "mp4",
+                }],
+            }
+        },
+    ]
+
+    last_error = None
+    for strategy in strategies:
         try:
-            info = await loop.run_in_executor(None, _run_ydl, opts, url)
+            print(f"🎯 Trying strategy: {strategy['name']}")
             
-            # Check if file exists and has proper size
+            # Clean up any partial downloads
+            for f in DOWNLOAD_DIR.glob(f"{fid}.*"):
+                if f != out:
+                    f.unlink(missing_ok=True)
+            
+            info = await loop.run_in_executor(None, _run_ydl, strategy["opts"], url)
+            
+            # Check result
             if out.exists():
                 size_mb = out.stat().st_size / (1024 * 1024)
-                print(f"✅ Downloaded: {size_mb:.1f}MB")
-                if size_mb < 1:  # Less than 1MB? Something's wrong
-                    out.unlink()  # Delete corrupt file
-                    raise HTTPException(500, "Downloaded file too small, likely blocked by YouTube")
-            else:
-                raise HTTPException(500, "File not created")
+                print(f"✅ {strategy['name']}: Downloaded {size_mb:.1f}MB")
                 
+                if size_mb > 1:  # Success!
+                    if background_tasks:
+                        background_tasks.add_task(cleanup_old_files)
+                    return FileResponse(
+                        path=out,
+                        media_type="video/mp4",
+                        filename=out.name,
+                        headers={"Content-Disposition": f'attachment; filename="{out.name}"'},
+                    )
+                else:
+                    print(f"⚠️ {strategy['name']}: File too small ({size_mb:.1f}MB), trying next...")
+                    out.unlink(missing_ok=True)
+                    
         except Exception as e:
-            if "ffmpeg" in str(e).lower():
-                raise HTTPException(500, "FFmpeg not installed on server!")
-            raise HTTPException(502, f"Video download failed: {e}")
+            print(f"❌ {strategy['name']}: {str(e)[:200]}")
+            last_error = str(e)
+            continue
 
-    if background_tasks:
-        background_tasks.add_task(cleanup_old_files)
-
-    return FileResponse(
-        path=out,
-        media_type="video/mp4",
-        filename=out.name,
-        headers={"Content-Disposition": f'attachment; filename="{out.name}"'},
+    # All strategies failed
+    raise HTTPException(
+        502,
+        f"All download methods failed. Last error: {last_error or 'Unknown'}"
     )
 
 
