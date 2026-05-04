@@ -327,12 +327,7 @@ async def video(
 
     # ✅ Format 18 = combined mp4+audio (360p) — no merge needed, always works
     # Fallback chain: 720p merge → 480p merge → 360p combined → best available
-    fmt = (
-        f"136+140/"           # 720p video + 140 audio (ffmpeg merge)
-        f"135+140/"           # 480p video + 140 audio (ffmpeg merge)
-        f"18/"                # 360p combined — no ffmpeg needed ✅
-        f"best"               # last resort
-    )
+    fmt = "18/best"
 
     opts = {
         **_base_opts(),
