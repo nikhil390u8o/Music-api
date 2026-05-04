@@ -341,24 +341,24 @@ async def video(
     fid = _short_id(f"{query}_{quality}")
     out = DOWNLOAD_DIR / f"{fid}.mp4"
 
-    # cache
     if out.exists():
         if background_tasks:
             background_tasks.add_task(cleanup_old_files)
         return FileResponse(out, media_type="video/mp4", filename=out.name)
 
-    # 🔥 THE ONLY FORMAT STRING YOU EVER NEED
-    fmt = (
-        f"(bestvideo[height<={quality}][ext=mp4]+bestaudio[ext=m4a])/"
-        f"(best[height<={quality}][ext=mp4])/"
-        f"best"
-    )
+    # ✅ FIXED FORMAT STRING
+    fmt = f"bestvideo[height<={quality}]+bestaudio/bestvideo[height<={quality}]/best[height<={quality}]/best"
 
     opts = {
         **_base_opts(),
         "format": fmt,
         "outtmpl": str(DOWNLOAD_DIR / f"{fid}.%(ext)s"),
         "merge_output_format": "mp4",
+        # ✅ YEH ADD KAR — ext restriction hata
+        "postprocessors": [{
+            "key": "FFmpegVideoConvertor",
+            "preferedformat": "mp4",
+        }],
     }
 
     try:
@@ -373,7 +373,6 @@ async def video(
         background_tasks.add_task(cleanup_old_files)
 
     return FileResponse(out, media_type="video/mp4", filename=out.name)
-
 
 # ─────────────────────────────────────────────
 #  5. STREAM URL (direct link — no download)
